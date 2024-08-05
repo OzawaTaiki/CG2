@@ -1,35 +1,33 @@
 #include <Windows.h>
 #include <string>
 #include <format>
-
-#include <d3d12.h>
-#include <dxgi1_6.h>
 #include <cassert>
-#include <dxgidebug.h>
-
-#pragma comment(lib,"d3d12.lib")
-#pragma comment(lib,"dxgi.lib")
-#pragma comment(lib,"dxguid.lib")
-#pragma comment(lib,"dxcompiler.lib")
-
-#include <dxcapi.h>
-
-#include "myLib/MyLib.h"
-
-#include "externals/imgui/imgui.h"
-#include "externals/imgui/imgui_impl_dx12.h"
-#include "externals/imgui/imgui_impl_win32.h"
-extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-#include "externals/DirectXTex/DirectXTex.h"
-#include "externals/DirectXTex/d3dx12.h"
-
 #include <vector>
 #include <fstream>
 #include <sstream>
 #include <random>
 #include <numbers>
 #include <map>
+
+#include <d3d12.h>
+#include <dxgi1_6.h>
+#include <dxgidebug.h>
+#include <dxcapi.h>
+
+#pragma comment(lib,"d3d12.lib")
+#pragma comment(lib,"dxgi.lib")
+#pragma comment(lib,"dxguid.lib")
+#pragma comment(lib,"dxcompiler.lib")
+
+#include "externals/imgui/imgui.h"
+#include "externals/imgui/imgui_impl_dx12.h"
+#include "externals/imgui/imgui_impl_win32.h"
+#include "externals/DirectXTex/DirectXTex.h"
+#include "externals/DirectXTex/d3dx12.h"
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+
+#include "myLib/MyLib.h"
 
 // ウィンドウプロシージャ
 LRESULT CALLBACK WindowProc(HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lparam);
@@ -673,7 +671,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	Microsoft::WRL::ComPtr<ID3D12RootSignature>rootSignature = nullptr;
 	hr = device->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
 	assert(SUCCEEDED(hr));
-	
+
 
 	/// InputLayoutの設定を行う
 	D3D12_INPUT_ELEMENT_DESC inputElementDescs[3] = {};
@@ -2209,13 +2207,13 @@ Object MakeSphereData(const Microsoft::WRL::ComPtr<ID3D12Device>& _device)
 	const uint32_t sphereVertexNum = kSubdivision * kSubdivision * 6;
 	std::vector<VertexData> vertices(sphereVertexNum);
 
-	const float kLatEvery = (float)M_PI / (float)kSubdivision;          // 緯度分割1つ分の角度 θ
-	const float kLonEvery = (float)M_PI * 2.0f / (float)kSubdivision;    // 経度分割1つ分の角度 φ
+	const float kLatEvery = std::numbers::pi_v<float> / (float)kSubdivision;          // 緯度分割1つ分の角度 θ
+	const float kLonEvery = std::numbers::pi_v<float>*2.0f / (float)kSubdivision;    // 経度分割1つ分の角度 φ
 
 	// 緯度の方向に分割   -π/2 ~ π/2
 	for (uint32_t latIndex = 0; latIndex < kSubdivision; latIndex++)
 	{
-		float lat = -(float)M_PI / 2.0f + kLatEvery * latIndex;         // 現在の緯度
+		float lat = -std::numbers::pi_v<float> / 2.0f + kLatEvery * latIndex;         // 現在の緯度
 
 		// 経度の方向に分割   0 ~ 2π
 		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; lonIndex++)
