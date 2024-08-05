@@ -29,6 +29,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg
 #include <sstream>
 #include <random>
 #include <numbers>
+#include <map>
 
 // ウィンドウプロシージャ
 LRESULT CALLBACK WindowProc(HWND _hwnd, UINT _msg, WPARAM _wparam, LPARAM _lparam);
@@ -170,6 +171,7 @@ struct MeshData
 	D3D12_INDEX_BUFFER_VIEW indexBufferView;
 	uint32_t indexNum;
 
+	std::string useMaterialName;
 };
 
 struct MaterialData
@@ -184,6 +186,7 @@ struct TransformationData
 	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResource;
 };
 
+
 struct  Object
 {
 	MeshData mesh;
@@ -191,6 +194,15 @@ struct  Object
 	TransformationData transform;
 
 	uint32_t textureHandle;
+};
+
+struct  MultiObject
+{
+	std::map< std::string, MeshData> mesh;
+	std::map< std::string, MaterialData> material;
+	TransformationData transform;
+
+	std::map< std::string, uint32_t>textureHandle;
 };
 
 struct Texture
@@ -224,6 +236,9 @@ uint32_t LoadTexture(const std::string& _filePath, const Microsoft::WRL::ComPtr<
 
 Object LoadObjFile(const std::string& _directoryPath, const std::string& _filename, const Microsoft::WRL::ComPtr<ID3D12Device>& _device, const  Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>& _commandList, const  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>& _srvDescriptorHeap, uint32_t _srvSize);
 
+MultiObject LoadMultiObjFile(const std::string& _directoryPath, const std::string& _filename, const Microsoft::WRL::ComPtr<ID3D12Device>& _device, const  Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>& _commandList, const  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>& _srvDescriptorHeap, uint32_t _srvSize);
+
+Object findObjGroup(const MultiObject& _obj, std::string _key);
 
 /// <summary>
 /// 三角形のデータ作成
@@ -280,6 +295,8 @@ void DrawSprite(const Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>& _comman
 void DrawSphere(const Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>& _commandList, const Object& _obj);
 
 void DrawObj(const Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>& _commandList, const Object& _obj);
+
+void DrawMultiObj(const Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>& _commandList, const MultiObject& _obj);
 
 Particle MakeNewParticle(std::mt19937& _randomEngine, const Emitter& _emitter);
 
@@ -1120,8 +1137,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	suzanne = LoadObjFile("resources/obj", "suzanne.obj", device, commandList, srvDescriptorHeap, desriptorSizeSRV);
 	stTransform suzanneTransform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f} ,{0.0f,0.0f,0.0f} };
 
+
+	MultiObject multiMesh;
+	multiMesh = LoadMultiObjFile("resources/obj", "multiMesh.obj", device, commandList, srvDescriptorHeap, desriptorSizeSRV);
+	stTransform multiMeshTransform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f} ,{0.0f,0.0f,0.0f} };
+
+
+	MultiObject multiMaterial;
+	multiMaterial = LoadMultiObjFile("resources/obj", "multiMaterial.obj", device, commandList, srvDescriptorHeap, desriptorSizeSRV);
+	stTransform multiMaterialTransform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f} ,{0.0f,0.0f,0.0f} };
+	stTransform multiMaterialUVTrans1{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f} ,{0.0f,0.0f,0.0f} };
+	stTransform multiMaterialUVTrans2{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f} ,{0.0f,0.0f,0.0f} };
+
 	int scene = 0;
-	const char* sceneName[] = { "obj & sprite","sphere","obj & obj","suzanne" };
+	const char* sceneName[] = { "obj & sprite","sphere","obj & obj","suzanne","multiMesh","multiMaterial" };
 
 
 	int currentTexture = 0;
@@ -1290,7 +1319,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 				break;
 			case 3:
-
 				if (ImGui::BeginTabItem("suzanne"))
 				{
 					ImGui::ColorEdit4("color", &suzanne.material.materialData->color.x);
@@ -1300,6 +1328,105 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 					ImGui::Checkbox("Lighting", &enableLightting[0]);
 					suzanne.material.materialData->enabledLighthig = enableLightting[0];
 					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("DirectionalLight"))
+				{
+					ImGui::ColorEdit3("color", &directionalLightData->color.x);
+					ImGui::DragFloat3("direction", &directionalLightData->direction.x, 0.01f);
+					ImGui::DragFloat("intensity", &directionalLightData->intensity, 0.01f);
+					ImGui::Checkbox("enable Half Lambert", &ishalf);
+
+					directionalLightData->isHalf = ishalf;
+					directionalLightData->direction = Normalize(directionalLightData->direction);
+					ImGui::EndTabItem();
+				}
+				break;
+			case 4:
+				if (ImGui::BeginTabItem("multiMesh"))
+				{
+					auto iteObj1 = multiMesh.mesh.begin();
+					auto iteObj2 = multiMesh.mesh.begin();
+					std::advance(iteObj2, 1);
+
+					Object obj1 = findObjGroup(multiMesh, (*iteObj1).first);
+					Object obj2 = findObjGroup(multiMesh, (*iteObj2).first);
+
+					ImGui::ColorEdit4("color", &obj1.material.materialData->color.x);
+					ImGui::DragFloat3("scale", &multiMeshTransform.scale.x, 0.01f);
+					ImGui::DragFloat3("rotate", &multiMeshTransform.rotate.x, 0.01f);
+					ImGui::DragFloat3("translate", &multiMeshTransform.translate.x, 0.01f);
+					ImGui::Checkbox("Lighting", &enableLightting[0]);
+					ImGui::Checkbox("useTexture", &useTexture[0]);
+					obj1.material.materialData->enabledLighthig = enableLightting[0];
+					obj1.material.materialData->useTexture = useTexture[0] ? 1.0f : 0.0f;
+
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("DirectionalLight"))
+				{
+					ImGui::ColorEdit3("color", &directionalLightData->color.x);
+					ImGui::DragFloat3("direction", &directionalLightData->direction.x, 0.01f);
+					ImGui::DragFloat("intensity", &directionalLightData->intensity, 0.01f);
+					ImGui::Checkbox("enable Half Lambert", &ishalf);
+
+					directionalLightData->isHalf = ishalf;
+					directionalLightData->direction = Normalize(directionalLightData->direction);
+					ImGui::EndTabItem();
+				}
+				break;
+			case 5:
+				if (ImGui::BeginTabItem("multiMaterial"))
+				{
+					auto iteObj1 = multiMaterial.mesh.begin();
+					auto iteObj2 = multiMaterial.mesh.begin();
+					std::advance(iteObj2, 1);
+
+					Object obj1 = findObjGroup(multiMaterial, (*iteObj1).first);
+					Object obj2 = findObjGroup(multiMaterial, (*iteObj2).first);
+
+					ImGui::DragFloat3("scale", &multiMaterialTransform.scale.x, 0.01f);
+					ImGui::DragFloat3("rotate", &multiMaterialTransform.rotate.x, 0.01f);
+					ImGui::DragFloat3("translate", &multiMaterialTransform.translate.x, 0.01f);
+
+					ImGui::PushID((*iteObj1).first.c_str());
+					if (ImGui::CollapsingHeader((*iteObj1).first.c_str()))
+					{
+						ImGui::ColorEdit4("color", &obj1.material.materialData->color.x);
+						ImGui::Checkbox("Lighting", &enableLightting[0]);
+						ImGui::Checkbox("useTexture", &useTexture[0]);
+						obj1.material.materialData->enabledLighthig = enableLightting[0];
+						obj1.material.materialData->useTexture = useTexture[0] ? 1.0f : 0.0f;
+						ImGui::Spacing();
+						if (ImGui::TreeNode("uvTransform"))
+						{
+							ImGui::DragFloat2("uvTranslate", &multiMaterialUVTrans1.translate.x, 0.01f, -10.0f, 10.0f);
+							ImGui::DragFloat2("uvScale", &multiMaterialUVTrans1.scale.x, 0.01f, -10.0f, 10.0f);
+							ImGui::SliderAngle("uvRotate", &multiMaterialUVTrans1.rotate.z);
+							obj1.material.materialData->uvTransform = MakeAffineMatrix(multiMaterialUVTrans1.scale, multiMaterialUVTrans1.rotate, multiMaterialUVTrans1.translate);
+							ImGui::TreePop();
+						}
+					}
+					ImGui::PopID();
+					ImGui::PushID((*iteObj2).first.c_str());
+					if (ImGui::CollapsingHeader((*iteObj2).first.c_str()))
+					{
+						ImGui::ColorEdit4("color", &obj2.material.materialData->color.x);
+						ImGui::Checkbox("Lighting", &enableLightting[1]);
+						ImGui::Checkbox("useTexture", &useTexture[1]);
+						obj2.material.materialData->enabledLighthig = enableLightting[1];
+						obj2.material.materialData->useTexture = useTexture[1] ? 1.0f : 0.0f;
+						ImGui::Spacing();
+						if (ImGui::TreeNode("uvTransform"))
+						{
+							ImGui::DragFloat2("uvTranslate", &multiMaterialUVTrans2.translate.x, 0.01f, -10.0f, 10.0f);
+							ImGui::DragFloat2("uvScale", &multiMaterialUVTrans2.scale.x, 0.01f, -10.0f, 10.0f);
+							ImGui::SliderAngle("uvRotate", &multiMaterialUVTrans2.rotate.z);
+							obj2.material.materialData->uvTransform = MakeAffineMatrix(multiMaterialUVTrans2.scale, multiMaterialUVTrans2.rotate, multiMaterialUVTrans2.translate);
+							ImGui::TreePop();
+						}
+					}
+					ImGui::EndTabItem();
+					ImGui::PopID();
 				}
 				if (ImGui::BeginTabItem("DirectionalLight"))
 				{
@@ -1335,7 +1462,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			*teapot.transform.transformMat = CalculateObjectWVPMat(teapotTransform, viewProjectionMatrix);
 			*bunny.transform.transformMat = CalculateObjectWVPMat(bunnyTransform, viewProjectionMatrix);
 			*suzanne.transform.transformMat = CalculateObjectWVPMat(suzanneTransform, viewProjectionMatrix);
-
+			*multiMesh.transform.transformMat = CalculateObjectWVPMat(multiMeshTransform, viewProjectionMatrix);
+			*multiMaterial.transform.transformMat = CalculateObjectWVPMat(multiMaterialTransform, viewProjectionMatrix);
 
 			///
 			/// 更新処理ここまで
@@ -1394,6 +1522,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			case 0:
 			case 1:
 			case 2:
+			case 4:
+			case 5:
 				commandList->SetGraphicsRootSignature(rootSignature.Get());
 				commandList->SetPipelineState(graphicsPipelineState.Get());
 				commandList->SetGraphicsRootConstantBufferView(3, directionalLightResource->GetGPUVirtualAddress());
@@ -1426,6 +1556,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				break;
 			case 3:
 				DrawObj(commandList, suzanne);
+				break;
+			case 4:
+				DrawMultiObj(commandList, multiMesh);
+				break;
+			case 5:
+				DrawMultiObj(commandList, multiMaterial);
 				break;
 			default:
 				break;
@@ -1849,6 +1985,8 @@ Object LoadObjFile(const std::string& _directoryPath, const std::string& _filena
 	std::vector<Vector2> texcoords;		//テクスチャ座標
 	std::string line;					//ファイルから読んだ1行を格納するもの
 
+	std::string objName;				// "o" オブジェクト識別用
+
 	bool useTexcoord = false;
 
 	std::ifstream file(_directoryPath + "/" + _filename);
@@ -1860,7 +1998,10 @@ Object LoadObjFile(const std::string& _directoryPath, const std::string& _filena
 		std::istringstream s(line);
 		s >> identifier;
 
-		if (identifier == "v") {
+		if (identifier == "o") {
+			s >> objName;
+		}
+		else if (identifier == "v") {
 			Vector4 position;
 			s >> position.x >> position.y >> position.z;
 			position.w = 1.0f;
@@ -1919,6 +2060,7 @@ Object LoadObjFile(const std::string& _directoryPath, const std::string& _filena
 			vertices.push_back(triangle[2]);
 			vertices.push_back(triangle[1]);
 			vertices.push_back(triangle[0]);
+
 		}
 		else if (identifier == "mtllib")
 		{
@@ -1945,15 +2087,164 @@ Object LoadObjFile(const std::string& _directoryPath, const std::string& _filena
 	file.close();
 
 	modelData.mesh = InitializeMeshData(_device, vertices);
-	modelData.material = InitilizeMaterialData(_device);
 	modelData.transform = InitializeTransformationData(_device);
+	modelData.material = InitilizeMaterialData(_device);
 
 	if (!useTexcoord)
 		modelData.textureHandle = -1;
 
 	return modelData;
 }
+MultiObject LoadMultiObjFile(const std::string& _directoryPath, const std::string& _filename, const Microsoft::WRL::ComPtr<ID3D12Device>& _device, const  Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>& _commandList, const  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>& _srvDescriptorHeap, uint32_t _srvSize)
+{
+	MultiObject modelData;				//構築するmodelData
+	std::vector<VertexData> vertices;
+	std::vector<Vector4> positions;		//位置
+	std::vector<Vector3> normals;		//法線
+	std::vector<Vector2> texcoords;		//テクスチャ座標
+	std::string line;					//ファイルから読んだ1行を格納するもの
 
+	std::string objName;				// "o" オブジェクト識別用
+	std::string useMaterialName;
+
+	int objCount = 0;
+	bool useTexcoord = false;
+
+	std::ifstream file(_directoryPath + "/" + _filename);
+	assert(file.is_open());
+
+	while (std::getline(file, line))
+	{
+		std::string identifier;
+		std::istringstream s(line);
+		s >> identifier;
+
+
+		if (identifier == "o" && objCount != 0)
+		{
+			modelData.mesh[objName] = InitializeMeshData(_device, vertices);
+			modelData.mesh[objName].useMaterialName = useMaterialName;
+		}
+
+		if (identifier == "o") {
+			s >> objName;
+			objCount++;
+		}
+		else if (identifier == "v") {
+			Vector4 position;
+			s >> position.x >> position.y >> position.z;
+			position.w = 1.0f;
+			positions.push_back(position);
+		}
+		else if (identifier == "vt") {
+			Vector2 texcoord;
+			s >> texcoord.x >> texcoord.y;
+			texcoords.push_back(texcoord);
+			useTexcoord = true;
+		}
+		else if (identifier == "vn") {
+			Vector3 normal;
+			s >> normal.x >> normal.y >> normal.z;
+			normals.push_back(normal);
+		}
+		else if (identifier == "f") {
+			VertexData triangle[3];
+			//面は三角形限定。その他は未対応
+			for (int32_t faceVertex = 0; faceVertex < 3; ++faceVertex) {
+				std::string vertexDefinition;
+				s >> vertexDefinition;
+				//頂点の要素へのIndexは「位置/uV/法線」で格納されているので、分解してIndexを取得する
+				std::istringstream v(vertexDefinition);
+				uint32_t elementIndices[3];
+				for (int32_t element = 0; element < 3; ++element) {
+					std::string index;
+					std::getline(v, index, '/');// /区切りでインデックスを読んでいく
+					if (index == "")
+						elementIndices[element] = NULL;
+					else
+						elementIndices[element] = std::stoi(index);
+
+				}
+				//要素へのIndexから、実際の要素の値を取得して、頂点を構築する
+				Vector4 position;
+				Vector2 texcoord;
+				Vector3 normal;
+
+				position = positions[elementIndices[0] - 1];
+				position.z *= -1.0f;
+				if (useTexcoord)
+				{
+					texcoord = texcoords[elementIndices[1] - 1];
+					texcoord.y = 1.0f - texcoord.y;
+				}
+				else
+					texcoord = { 0 ,0 };
+				normal = normals[elementIndices[2] - 1];
+				normal.z *= -1.0f;
+
+
+				triangle[faceVertex] = { position,texcoord,normal };
+
+			}
+			vertices.push_back(triangle[2]);
+			vertices.push_back(triangle[1]);
+			vertices.push_back(triangle[0]);
+
+		}
+		else if (identifier == "mtllib")
+		{
+			std::string mtlName;
+			std::string mtlFilePath;
+			s >> mtlFilePath;
+			std::ifstream mtlFile(_directoryPath + "/" + mtlFilePath);
+			assert(mtlFile.is_open());
+			while (std::getline(mtlFile, line))
+			{
+				std::istringstream mtls(line);
+				identifier = "0";
+				mtls >> identifier;
+
+				if (identifier == "map_Kd")
+				{
+					std::string texturePath;
+					mtls >> texturePath;
+
+					std::string path = _directoryPath + '/' + texturePath;
+					modelData.textureHandle[mtlName] = LoadTexture(path, _device, _commandList, _srvDescriptorHeap, _srvSize);
+					modelData.material[mtlName] = InitilizeMaterialData(_device);
+				}
+				else if (identifier == "newmtl")
+				{
+					mtls >> mtlName;
+				}
+			}
+		}
+		else if (identifier == "usemtl") {
+			s >> useMaterialName;
+		}
+
+	}
+	file.close();
+
+	modelData.mesh[objName] = InitializeMeshData(_device, vertices);
+	modelData.mesh[objName].useMaterialName = useMaterialName;
+
+	modelData.transform = InitializeTransformationData(_device);
+
+	return modelData;
+}
+
+Object findObjGroup(const MultiObject& _obj, std::string _key)
+{
+	Object obj;
+
+	obj.mesh = (*_obj.mesh.find(_key)).second;
+	obj.material = (*_obj.material.find(obj.mesh.useMaterialName)).second;
+	obj.textureHandle = (*_obj.textureHandle.find(obj.mesh.useMaterialName)).second;
+	obj.transform = _obj.transform;
+
+	return obj;
+}
 
 Object MakeTriangleData(const Microsoft::WRL::ComPtr<ID3D12Device>& _device)
 {
@@ -2246,7 +2537,6 @@ void DrawObj(const Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>& _commandLi
 
 	if (_model.textureHandle != -1)
 	{
-
 		_commandList->SetGraphicsRootConstantBufferView(0, _model.material.materialResource->GetGPUVirtualAddress());
 		_commandList->SetGraphicsRootConstantBufferView(1, _model.transform.wvpResource->GetGPUVirtualAddress());
 		_commandList->SetGraphicsRootDescriptorTable(2, GetTextureHandle(_model.textureHandle));
@@ -2258,6 +2548,21 @@ void DrawObj(const Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>& _commandLi
 	}
 
 	_commandList->DrawInstanced(_model.mesh.vertexNum, 1, 0, 0);
+}
+
+void DrawMultiObj(const Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList>& _commandList, const MultiObject& _obj)
+{
+	Object obj;
+	for (const auto& [key, mesh] : _obj.mesh)
+	{
+		obj = findObjGroup(_obj, key);
+
+		_commandList->IASetVertexBuffers(0, 1, &obj.mesh.vertexBufferView);
+		_commandList->SetGraphicsRootConstantBufferView(0, obj.material.materialResource->GetGPUVirtualAddress());
+		_commandList->SetGraphicsRootConstantBufferView(1, obj.transform.wvpResource->GetGPUVirtualAddress());
+		_commandList->SetGraphicsRootDescriptorTable(2, GetTextureHandle(obj.textureHandle));
+		_commandList->DrawInstanced(obj.mesh.vertexNum, 1, 0, 0);
+	}
 }
 
 
